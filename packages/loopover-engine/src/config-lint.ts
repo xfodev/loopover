@@ -101,8 +101,18 @@ function parseCanonicalTopLevelObject(text: string | null | undefined): Record<s
   const trimmed = raw.trim();
   if (!trimmed || isOversize(raw)) return null;
   const looksLikeJson = trimmed.startsWith("{") || trimmed.startsWith("[");
+  if (looksLikeJson) {
+    try {
+      return topLevelObjectOrNull(JSON.parse(trimmed));
+    } catch {
+      // YAML flow mappings can start with "{" or "[" while still being valid manifest syntax, so a JSON-parse
+      // failure must fall back to YAML rather than bail to null (#7244) -- matching the JSON-then-YAML fallback
+      // parseTopLevelObject already uses for the sibling unknownTopLevelWarnings path. Without this, a real,
+      // parseable YAML-flow manifest reported zero recognized fields.
+    }
+  }
   try {
-    return topLevelObjectOrNull(looksLikeJson ? JSON.parse(trimmed) : parseYaml(trimmed));
+    return topLevelObjectOrNull(parseYaml(trimmed));
   } catch {
     return null;
   }

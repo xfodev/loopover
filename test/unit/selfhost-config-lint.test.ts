@@ -271,12 +271,24 @@ unknownSecretKey: super-secret-value
     const result = lintManifestText("{wantedPaths: [src/], unknownSecretKey: secret}");
 
     expect(result.ok).toBe(false);
-    expect(result.recognizedFields).toEqual([]);
+    // #7244: the canonical parser now falls back to YAML on a JSON-parse failure, so the recognized field in a
+    // JSON-looking-but-YAML flow mapping is reported (previously []), even while the unknown field still warns.
+    expect(result.recognizedFields).toEqual(["wantedPaths"]);
     expect(result.warnings).toEqual([
       "Manifest content was not valid JSON; ignoring it and falling back to deterministic signals.",
       "Manifest contains unknown top-level field: unknownSecretKey.",
     ]);
     expect(JSON.stringify(result)).not.toContain("secret");
+  });
+
+  it("REGRESSION (#7244): recognizes fields in a valid YAML flow mapping that starts like JSON but is not valid JSON", () => {
+    // `{gate: {enabled: false}, review: {profile: chill}}` is a valid YAML flow mapping (unquoted keys) but
+    // invalid JSON. recognizedFieldsFor's canonical parser used to bail to null on the JSON-parse failure --
+    // unlike its sibling unknownTopLevelWarnings, which already fell back to YAML -- so a real, parseable
+    // manifest reported zero recognized fields. It now recognizes them via the same fallback.
+    const result = lintManifestText("{gate: {enabled: false}, review: {profile: chill}}");
+
+    expect(result.recognizedFields).toEqual(["gate", "review"]);
   });
 
   it("keeps known JSON manifests quiet and non-object JSON invalid", () => {
